@@ -1,0 +1,6 @@
+langchain_openai
+langchain_google_genai
+browser_use
+requests
+python-dotenv
+pydantic

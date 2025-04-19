@@ -13,10 +13,20 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
+# Email configuration
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com") # Default to Gmail
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) # Default to Gmail TLS port
+
 # Application settings
-MAX_CONCURRENT_REQUESTS = 5
+MAX_CONCURRENT_REQUESTS =1
 NOTION_URL_PROPERTY_NAME = "Urls"
 NOTION_API_VERSION = "2022-06-28"
+PREFERRED_SHOE_SIZE = "UK 9"
+PREFERRED_TOP_SIZE = "S"
+PREFERRED_BOTTOM_SIZE = "30"
 
 # Configure logging
 logging.basicConfig(

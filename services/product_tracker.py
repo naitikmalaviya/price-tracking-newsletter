@@ -7,7 +7,7 @@ from pydantic import SecretStr
 
 from browser_use import Agent, Controller
 from models.WishListItem import WishlistItem
-from config import GEMINI_API_KEY, MAX_CONCURRENT_REQUESTS
+from config import GEMINI_API_KEY, MAX_CONCURRENT_REQUESTS, PREFERRED_BOTTOM_SIZE, PREFERRED_SHOE_SIZE, PREFERRED_TOP_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,47 @@ async def process_product(url: str) -> WishlistItem:
         ]
         
         agent = Agent(
-            task='Extract information about the product on the current page. If it is a shoe, select size UK 9. Capture the product image URL, current price, and full product name.',
-            llm=ChatGoogleGenerativeAI(model='gemini-2.0-flash-lite', api_key=SecretStr(str(GEMINI_API_KEY))),
+            task=f"""Objective: Extract product details, determine availability for a specific size (if applicable), and find the price and discount.
+
+1.  **Initial Page Load & Basic Info:**
+    - Extract the full product name.
+    - Extract the main product image URL. **Validate this URL.** It should be a direct link to an image file (e.g., ending in .jpg, .png, .webp) or a usable image source URL. If an invalid or non-image URL is extracted, try to find the correct main image URL again. If a valid URL cannot be found, set the image URL field to null or an empty string.
+    - Determine the product type (e.g., shoe, top, bottom, other).
+
+2.  **Size Selection (Conditional):**
+    - If the product type requires size selection (shoe, top, bottom):
+        - Attempt to select the preferred size:
+            - Shoe: {PREFERRED_SHOE_SIZE} or equivalent.
+            - Top: {PREFERRED_TOP_SIZE} or equivalent.
+            - Bottom: {PREFERRED_BOTTOM_SIZE} or equivalent.
+        - Note whether the preferred size could be successfully selected/activated. If not (e.g., size option is disabled, greyed out, or not present), consider the preferred size unavailable.
+
+3.  **Availability Check (Post Size Selection or General):**
+    - **If size selection was attempted (Step 2):**
+        - If the preferred size was *unavailable* or *could not be selected*, set 'price' to -1.0.
+        - If the preferred size *was* selected, check *specifically* for availability indicators related to that size. Look for:
+            - An active 'Add to Cart', 'Add to Bag', or 'Buy Now' button.
+            - Explicit messages like 'In Stock', 'Available'.
+            - Conversely, look for 'Out of Stock', 'Unavailable', 'Notify me' messages *after* size selection, or a disabled 'Add to Cart' button.
+        - If the selected size is indicated as unavailable, set 'price' to -1.0.
+    - **If size selection was NOT applicable (product type 'other' or no size options):**
+        - Check the general availability of the product. Look for an active 'Add to Cart'/'Buy Now' button or explicit 'In Stock' messages. Check for general 'Out of Stock' messages.
+        - If the product is indicated as unavailable, set 'price' to -1.0.
+
+4.  **Price Extraction:**
+    - If the 'price' has NOT been set to -1.0 in the previous steps (meaning the product/size is considered available):
+        - Extract the current price. If a size was selected, ensure it's the price for *that specific size*. If no size was selected, get the general product price.
+        - Set the extracted price in the 'price' field. Ensure it is a numerical value (e.g., 49.99).
+    - If at any point availability cannot be confirmed or a price cannot be extracted despite the item seeming available, set 'price' to -1.0 as a fallback.
+
+5.  **Discount Calculation:**
+    - If the 'price' field is greater than 0.0:
+        - Check for any indicated discounts (e.g., '% off', 'Save $X', original price vs. sale price).
+        - Calculate or extract the discount percentage (e.g., 25.0 for 25% off). If calculating from a saved amount, use the formula: (Amount Saved / (Current Price + Amount Saved)) * 100. If calculating from original and sale price: ((Original Price - Sale Price) / Original Price) * 100.
+        - Set the calculated percentage in the 'discount' field. Ensure it's a number.
+    - If no discount is found or the price is -1.0, set the 'discount' field to 0.0.
+""",
+            llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash-preview-04-17', api_key=SecretStr(str(GEMINI_API_KEY))),
             controller=controller,
             initial_actions=initial_actions
         )

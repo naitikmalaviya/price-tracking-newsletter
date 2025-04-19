@@ -1,9 +1,11 @@
 import asyncio
 import logging
+from datetime import datetime
 
 from config import MAX_CONCURRENT_REQUESTS
 from services.notion_loader import NotionLoader
 from services.product_tracker import process_products
+from services.email_sender import EmailSender
 
 logger = logging.getLogger(__name__)
 
@@ -29,21 +31,22 @@ async def main():
     if not results:
         logger.warning("No products were successfully processed")
         return
+
     
-    # Step 3: Output results
-    logger.info(f"Successfully processed {len(results)} products")
-    print("\n" + "="*50)
-    print("PRICE TRACKING RESULTS")
-    print("="*50)
-    
-    for item in results:
-        print(f"\nProduct: {item.name}")
-        print(f"URL: {item.url}")
-        print(f"Price: {item.price}")
-        print(f"Image URL: {item.image_url}")
-        print("-"*50)
-    
-    #TODO: Implement newsletter sending functionality and price history saving
+    # Step 3: Send email notification
+    logger.info("Preparing to send email notification")
+    try:
+        email_sender = EmailSender()
+        today_date = datetime.now().strftime("%Y-%m-%d")
+        subject = f"Price Tracking Update - {today_date}"
+        email_sender.send_email(subject, results)
+        logger.info("Email sending process initiated.")
+    except ValueError as e:
+        logger.error(f"Email configuration error: {e}")
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+
+    # TODO: Implement price history saving
 
 if __name__ == "__main__":
     asyncio.run(main())

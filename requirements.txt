@@ -1,6 +1,7 @@
-langchain_openai
-langchain_google_genai
-browser_use
-requests
-python-dotenv
-pydantic
+langchain-openai~=0.3.11
+langchain-google_genai~=2.1.2
+browser-use~=0.1.41
+requests~=2.32.3
+python-dotenv~=1.1.0
+pydantic~=2.10.6
+Jinja2~=3.1.4

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Price Tracking Update</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; }
+        .container { max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            overflow: auto;
+        }
+        .item:last-child { border-bottom: none; }
+        .item img {
+            width: 100px;
+            height: 100px;
+            object-fit: contain;
+            float: left;
+            margin-right: 15px;
+            background-color: #f0f0f0;
+        }
+        .item-details { overflow: hidden; }
+        .item-name { font-weight: bold; font-size: 1.1em; }
+        .item-price { color: #008000; font-weight: bold; }
+        .item-discount { color: #d9534f; }
+        .unavailable { color: #888; }
+        h1, h2 { color: #333; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Price Tracking Update</h1>
+
+        {% if available_items %}
+            <h2>Available Items</h2>
+            {% for item in available_items %}
+            <div class="item">
+                {# Use a default placeholder if image_url is missing or empty #}
+                <img src="{{ item.image_url if item.image_url else 'https://placehold.co/100.png?text=Some\nFancy\nProduct' }}" alt="{{ item.name }}">
+                <div class="item-details">
+                    <div class="item-name"><a href="{{ item.url }}" target="_blank">{{ item.name }}</a></div>
+                    <div class="item-price">Price: {{ "%.2f"|format(item.price) }}</div>
+                    {% if item.discount > 0 %}
+                    <div class="item-discount">Discount: {{ "%.1f"|format(item.discount) }}%</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>No tracked items are currently available at the desired price/size.</p>
+        {% endif %}
+
+        {% if unavailable_items %}
+            <h2>Unavailable / Out of Stock Items</h2>
+             {% for item in unavailable_items %}
+            <div class="item unavailable">
+                 {# Use a default placeholder if image_url is missing or empty #}
+                 <img src="{{ item.image_url if item.image_url else 'https://placehold.co/100.png?text=Some\nFancy\nProduct' }}" alt="{{ item.name }}">
+                 <div class="item-details">
+                    <div class="item-name"><a href="{{ item.url }}" target="_blank">{{ item.name }}</a></div>
+                    <div>Currently unavailable or out of stock in the desired size.</div>
+                 </div>
+            </div>
+             {% endfor %}
+        {% endif %}
+
+        <p><em>This is an automated email. Prices and availability checked recently.</em></p>
+    </div>
+</body>
+</html>

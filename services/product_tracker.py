@@ -5,7 +5,7 @@ from typing import List
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import SecretStr
 
-from browser_use import Agent, Controller
+from browser_use import Agent, Browser, BrowserConfig, Controller
 from models.WishListItem import WishlistItem
 from config import GEMINI_API_KEY, MAX_CONCURRENT_REQUESTS, PREFERRED_BOTTOM_SIZE, PREFERRED_SHOE_SIZE, PREFERRED_TOP_SIZE
 
@@ -21,6 +21,7 @@ async def process_product(url: str) -> WishlistItem:
         ]
         
         agent = Agent(
+            browser= Browser(config=BrowserConfig(headless=True, timeout=60_000)),
             task=f"""Objective: Extract product details, determine availability for a specific size (if applicable), and find the price and discount.
 
 1.  **Initial Page Load & Basic Info:**

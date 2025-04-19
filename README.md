@@ -2,7 +2,9 @@
 
 This project scrapes product pages you list in a Notion database, checks for your preferred size (if applicable), grabs the current price and discount, and sends you a neat email summary.
 
-![Example Email Output](docs/images/example-mail.png)
+<p align="center">
+  <img src="docs/images/example-mail.png" alt="Example Email Output" width="600"/>
+</p>
 
 This repository is set up as a template. Just click that shiny "Use this template" button above to create your own copy.
 

@@ -1,28 +1,31 @@
 import logging
 import asyncio
-from typing import List
-
+from typing import List, Dict, Any, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import SecretStr
 
 from browser_use import Agent, Browser, BrowserConfig, Controller
-from models.WishListItem import WishlistItem
+from models.WishListItem import WishlistItem 
+from models.ScrapedProductData import ScrapedProductData
 from config import GEMINI_API_KEY, MAX_CONCURRENT_REQUESTS, PREFERRED_BOTTOM_SIZE, PREFERRED_SHOE_SIZE, PREFERRED_TOP_SIZE
 
 logger = logging.getLogger(__name__)
 
-async def process_product(url: str) -> WishlistItem:
-    """Process a single product URL and return WishlistItem data."""
-    try:
-        controller = Controller(output_model=WishlistItem)
+async def process_product(item_data: Dict[str, Any]) -> Optional[WishlistItem]:
+    """Process a single product URL and return WishlistItem data, including original lowest price info."""
+    url = item_data.get('url')
+    page_id = item_data.get('page_id')
+    lowest_price_so_far = item_data.get('lowest_price_so_far')
+    lowest_price_date = item_data.get('lowest_price_date')
 
-        initial_actions = [
-            {'go_to_url': {'url': url}}
-        ]
-        
-        agent = Agent(
-            browser= Browser(config=BrowserConfig(headless=True, timeout=60_000)),
-            task=f"""Objective: Extract product details, determine availability for a specific size (if applicable), and find the price and discount.
+    if not url or not page_id:
+        logger.warning(f"Skipping item due to missing URL or page_id: {item_data}")
+        return None
+
+    try:
+        controller = Controller(output_model=ScrapedProductData)
+
+        task_description = f"""Objective: Extract product details, determine availability for a specific size (if applicable), and find the price and discount.
 
 1.  **Initial Page Load & Basic Info:**
     - Extract the full product name.
@@ -61,8 +64,17 @@ async def process_product(url: str) -> WishlistItem:
         - Calculate or extract the discount percentage (e.g., 25.0 for 25% off). If calculating from a saved amount, use the formula: (Amount Saved / (Current Price + Amount Saved)) * 100. If calculating from original and sale price: ((Original Price - Sale Price) / Original Price) * 100.
         - Set the calculated percentage in the 'discount' field. Ensure it's a number.
     - If no discount is found or the price is -1.0, set the 'discount' field to 0.0.
-""",
+"""
+
+        initial_actions = [
+            {'go_to_url': {'url': url}}
+        ]
+        
+        agent = Agent(
+            browser= Browser(config=BrowserConfig(headless=True, timeout=60_000)),
+            task=task_description,
             llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash-preview-04-17', api_key=SecretStr(str(GEMINI_API_KEY))),
+            
             controller=controller,
             initial_actions=initial_actions
         )
@@ -71,27 +83,43 @@ async def process_product(url: str) -> WishlistItem:
         result = history.final_result()
         
         if result:
-            parsed = WishlistItem.model_validate_json(result)
-            return parsed
+            scraped_data = ScrapedProductData.model_validate_json(result)
+            
+            final_item = WishlistItem(
+                page_id=page_id,
+                **scraped_data.model_dump(),
+                lowest_price_so_far=lowest_price_so_far,
+                lowest_price_date=lowest_price_date
+            )
+            return final_item
         return None
     except Exception as e:
-        logger.error(f"Error processing product URL {url}: {str(e)}")
-        return None
+        logger.error(f"Error processing product URL {url} (Page ID: {page_id}): {str(e)}")
 
-async def process_products(urls: List[str], max_concurrent: int = MAX_CONCURRENT_REQUESTS) -> List[WishlistItem]:
-    """Process multiple product URLs in parallel with a concurrency limit."""
-    # Create batches of URLs to process concurrently
+        return WishlistItem(
+            page_id=page_id,
+            name="Processing Error",
+            url=url,
+            price=-1.0, # Indicate error/unavailability
+            discount=0.0,
+            image_url="",
+            lowest_price_so_far=lowest_price_so_far,
+            lowest_price_date=lowest_price_date
+        )
+
+async def process_products(items_data: List[Dict[str, Any]], max_concurrent: int = MAX_CONCURRENT_REQUESTS) -> List[WishlistItem]:
+    """Process multiple product items (dict from Notion) in parallel with a concurrency limit."""
     results = []
     
-    for i in range(0, len(urls), max_concurrent):
-        batch = urls[i:i + max_concurrent]
-        batch_tasks = [process_product(url) for url in batch]
+    for i in range(0, len(items_data), max_concurrent):
+        batch = items_data[i:i + max_concurrent]
+        batch_tasks = [process_product(item_data) for item_data in batch]
         batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
         
         for result in batch_results:
             if isinstance(result, Exception):
-                logger.error(f"Error processing product: {result}")
-            elif result:
+                logger.error(f"Caught exception during batch processing: {result}")
+            elif result is not None:
                 results.append(result)
     
     return results

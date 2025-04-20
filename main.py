@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import date
 
 from config import MAX_CONCURRENT_REQUESTS
 from services.notion_loader import NotionLoader
@@ -14,39 +14,57 @@ async def main():
     Main function to control the price tracking workflow.
     """
     logger.info("Starting price tracking workflow")
+    today = date.today()
     
-    # Step 1: Load product URLs from Notion
-    logger.info("Loading URLs from Notion database")
+    # Step 1: Load product items (including IDs and lowest price history) from Notion
+    logger.info("Loading items from Notion database")
     notion_loader = NotionLoader()
-    product_urls = notion_loader.load_urls()
+    items_to_track = notion_loader.load_items() 
     
-    if not product_urls:
-        logger.warning("No URLs loaded from Notion database. Exiting.")
+    if not items_to_track:
+        logger.warning("No items loaded from Notion database. Exiting.")
         return
     
-    # Step 2: Process products and track prices
-    logger.info(f"Processing {len(product_urls)} products...")
-    results = await process_products(product_urls, max_concurrent=MAX_CONCURRENT_REQUESTS)
+    # Step 2: Process products to get current prices
+    logger.info(f"Processing {len(items_to_track)} items...")
+    processed_items = await process_products(items_to_track, max_concurrent=MAX_CONCURRENT_REQUESTS)
     
-    if not results:
+    if not processed_items:
         logger.warning("No products were successfully processed")
         return
 
-    
-    # Step 3: Send email notification
+    # Step 3: Compare prices, update Notion if new lowest found
+    logger.info("Comparing current prices with historical lows and updating Notion if necessary.")
+    items_for_email = []
+    for item in processed_items:
+        if item.price < 0:
+            logger.info(f"Skipping price comparison for unavailable/error item: {item.name} ({item.url})")
+            items_for_email.append(item)
+            continue
+
+        if item.lowest_price_so_far is None or item.price < item.lowest_price_so_far:
+            logger.info(f"New lowest price found for {item.name}: {item.price} (was {item.lowest_price_so_far})")
+            if item.lowest_price_so_far is not None:
+                item.lowest_price_so_far = item.price
+                item.lowest_price_date = today
+            notion_loader.update_lowest_price(item.page_id, item.price, today)
+        else:
+             logger.info(f"Current price {item.price} for {item.name} is not lower than recorded lowest {item.lowest_price_so_far} on {item.lowest_price_date}")
+
+        items_for_email.append(item)
+
+    # Step 4: Send email notification
     logger.info("Preparing to send email notification")
     try:
         email_sender = EmailSender()
-        today_date = datetime.now().strftime("%Y-%m-%d")
-        subject = f"Price Tracking Update - {today_date}"
-        email_sender.send_email(subject, results)
+        today_date_str = today.strftime("%Y-%m-%d")
+        subject = f"Price Tracking Update - {today_date_str}"
+        email_sender.send_email(subject, items_for_email) 
         logger.info("Email sending process initiated.")
     except ValueError as e:
         logger.error(f"Email configuration error: {e}")
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
-
-    # TODO: Implement price history saving
 
 if __name__ == "__main__":
     asyncio.run(main())

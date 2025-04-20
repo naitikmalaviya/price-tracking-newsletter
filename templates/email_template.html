@@ -20,14 +20,62 @@
             margin-right: 15px;
             background-color: #f0f0f0;
         }
-        .item-details { overflow: hidden; }
-        .item-name { font-weight: bold; font-size: 1.1em; }
-        .item-price { color: #008000; font-weight: bold; }
-        .item-discount { color: #d9534f; }
+        .item-details {
+            overflow: hidden;
+            padding-top: 5px;
+        }
+
+        .item-name { font-size: 1.125em; }
+        .item-name a {
+            color: #0066CC;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .item-name a:hover { text-decoration: underline; }
+
+        .item-price-container {
+             margin-bottom: 8px;
+        }
+        .price-label {
+            color: #444444;
+            font-size: 1em;
+            font-weight: normal;
+        }
+        .price-value {
+            color: #111111;
+            font-size: 1.25em;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .chip {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.875em;
+            font-weight: bold;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            color: #FFFFFF;
+        }
+
+        .chip-discount {
+            background-color: #2E7D32;
+        }
+        .chip-lowest-price {
+            background-color: #D84315;
+        }
+
         .unavailable { color: #888; }
+        .unavailable .item-price-container, .unavailable .chip {
+             opacity: 0.7;
+        }
+        .unavailable .item-lowest-price-note {
+            font-size: 0.9em;
+            color: #888;
+            margin-top: 5px; 
+        }
         h1, h2 { color: #333; }
-        a { color: #007bff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -39,12 +87,23 @@
             {% for item in available_items %}
             <div class="item">
                 {# Use a default placeholder if image_url is missing or empty #}
-                <img src="{{ item.image_url if item.image_url else 'https://placehold.co/100.png?text=Some\nFancy\nProduct' }}" alt="{{ item.name }}">
+                <img src="{{ item.image_url if item.image_url else 'https://placehold.co/100.png?text=No+Image' }}" alt="{{ item.name }}">
                 <div class="item-details">
                     <div class="item-name"><a href="{{ item.url }}" target="_blank">{{ item.name }}</a></div>
-                    <div class="item-price">Price: {{ "%.2f"|format(item.price) }}</div>
+                    {# Separate Price Label and Value #}
+                    <div class="item-price-container">
+                        <span class="price-label">Price:</span>
+                        <span class="price-value">{{ "%.2f"|format(item.price) }}</span>
+                    </div>
+                    {# Chips for discount and lowest price #}
                     {% if item.discount > 0 %}
-                    <div class="item-discount">Discount: {{ "%.1f"|format(item.discount) }}%</div>
+                    <span class="chip chip-discount">Discount: {{ "%.1f"|format(item.discount) }}%</span>
+                    {% endif %}
+                    {% if item.lowest_price_so_far and item.lowest_price_date %}
+                        {# Removed conditional class logic for lowest price chip #}
+                        <span class="chip chip-lowest-price">
+                            Lowest: {{ "%.2f"|format(item.lowest_price_so_far) }} ({{ item.lowest_price_date.strftime('%b %d') }})
+                        </span>
                     {% endif %}
                 </div>
             </div>
@@ -58,15 +117,21 @@
              {% for item in unavailable_items %}
             <div class="item unavailable">
                  {# Use a default placeholder if image_url is missing or empty #}
-                 <img src="{{ item.image_url if item.image_url else 'https://placehold.co/100.png?text=Some\nFancy\nProduct' }}" alt="{{ item.name }}">
+                 <img src="{{ item.image_url if item.image_url else 'https://placehold.co/100.png?text=No+Image' }}" alt="{{ item.name }}">
                  <div class="item-details">
                     <div class="item-name"><a href="{{ item.url }}" target="_blank">{{ item.name }}</a></div>
-                    <div>Currently unavailable or out of stock in the desired size.</div>
+                    <div>Currently unavailable or out of stock.</div>
+                    {% if item.lowest_price_so_far and item.lowest_price_date %}
+                    {# Display lowest price info plainly for unavailable items #}
+                    <div class="item-lowest-price-note">
+                        (Lowest recorded: {{ "%.2f"|format(item.lowest_price_so_far) }} on {{ item.lowest_price_date.strftime('%Y-%m-%d') }})
+                    </div>
+                    {% endif %}
                  </div>
             </div>
              {% endfor %}
         {% endif %}
-
+        
         <p><em>This is an automated email. Prices and availability checked recently.</em></p>
     </div>
 </body>

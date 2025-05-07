@@ -3,8 +3,8 @@ name: Price Tracker Workflow
 on:
   workflow_dispatch:
   schedule:
-    # Runs every 3 days
-    - cron: '30 3 */3 * *'
+    # Runs at every 3 days
+    - cron: '30 2 */3 * *'
 
 jobs:
   run-tracker:
@@ -28,10 +28,10 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_M_DATABASE_ID }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_M_EMAIL }}
           SMTP_SERVER: ${{ secrets.SMTP_SERVER || 'smtp.gmail.com' }}
           SMTP_PORT: ${{ secrets.SMTP_PORT || 587 }}
         run: python main.py

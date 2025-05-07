@@ -1,4 +1,4 @@
-name: Price Tracker Workflow
+name: Price Tracker Workflow - M
 
 on:
   workflow_dispatch:

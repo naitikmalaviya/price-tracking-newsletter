@@ -153,8 +153,9 @@ mem0ai==0.1.93
     # via browser-use
 monotonic==1.6
     # via posthog
-numpy==2.3.1
+numpy==1.26.4
     # via
+    #   -r requirements.txt
     #   faiss-cpu
     #   langchain-aws
     #   qdrant-client

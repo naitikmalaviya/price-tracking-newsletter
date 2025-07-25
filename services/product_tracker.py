@@ -73,7 +73,7 @@ async def process_product(item_data: Dict[str, Any]) -> Optional[WishlistItem]:
         agent = Agent(
             browser= Browser(config=BrowserConfig(headless=True, timeout=60_000)),
             task=task_description,
-            llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash-preview-04-17', api_key=SecretStr(str(GEMINI_API_KEY))),
+            llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash', api_key=SecretStr(str(GEMINI_API_KEY))),
             
             controller=controller,
             initial_actions=initial_actions

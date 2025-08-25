@@ -1,11 +1,12 @@
 import logging
 import asyncio
 from typing import List, Dict, Any, Optional
-from langchain_google_genai import ChatGoogleGenerativeAI
-from pydantic import SecretStr
+import os
 
-from browser_use import Agent, Browser, BrowserConfig, Controller
-from models.WishListItem import WishlistItem 
+from browser_use import Agent, Controller
+from browser_use.llm import ChatGoogle
+
+from models.WishListItem import WishlistItem
 from models.ScrapedProductData import ScrapedProductData
 from config import GEMINI_API_KEY, MAX_CONCURRENT_REQUESTS, PREFERRED_BOTTOM_SIZE, PREFERRED_SHOE_SIZE, PREFERRED_TOP_SIZE
 
@@ -25,56 +26,70 @@ async def process_product(item_data: Dict[str, Any]) -> Optional[WishlistItem]:
     try:
         controller = Controller(output_model=ScrapedProductData)
 
-        task_description = f"""Objective: Extract product details, determine availability for a specific size (if applicable), and find the price and discount.
+        task_description = f"""Extract product information from this e-commerce page and determine availability for my preferred size.
 
-1.  **Initial Page Load & Basic Info:**
-    - Extract the full product name.
-    - Extract the main product image URL. **Validate this URL.** It should be a direct link to an image file (e.g., ending in .jpg, .png, .webp) or a usable image source URL. If an invalid or non-image URL is extracted, try to find the correct main image URL again. If a valid URL cannot be found, set the image URL field to null or an empty string.
-    - Determine the product type (e.g., shoe, top, bottom, other).
+**Product Information to Extract:**
+1. Product name (full title as displayed)
+2. **Main product image URL - CRITICAL REQUIREMENTS:**
+   - Find the PRIMARY/HERO product image (usually the largest, most prominent image)
+   - Look for images in these common locations:
+     * Main product gallery (first/default image)
+     * Hero image section
+     * Primary product showcase area
+   - Extract the FULL, DIRECT image URL that:
+     * Ends with image extensions: .jpg, .jpeg, .png, .webp, .avif
+     * Is a complete URL starting with http:// or https://
+     * Points directly to the image file (not a thumbnail or placeholder)
+   - Common image selectors to check:
+     * img[data-main-image], img[data-hero], img.product-image
+     * Images inside .product-gallery, .hero-image, .main-image containers
+     * The largest img element in the product area
+   - **VALIDATION STEPS:**
+     * Verify the URL is complete and accessible
+     * Ensure it's not a data: URL or placeholder
+     * If multiple images exist, choose the main/hero image (usually first or largest)
+     * If no valid image found, set to empty string ""
+3. Product type classification (shoe, top, bottom, or other)
 
-2.  **Size Selection (Conditional):**
-    - If the product type requires size selection (shoe, top, bottom):
-        - Attempt to select the preferred size:
-            - Shoe: {PREFERRED_SHOE_SIZE} or equivalent.
-            - Top: {PREFERRED_TOP_SIZE} or equivalent.
-            - Bottom: {PREFERRED_BOTTOM_SIZE} or equivalent.
-        - Note whether the preferred size could be successfully selected/activated. If not (e.g., size option is disabled, greyed out, or not present), consider the preferred size unavailable.
+**Size Selection Process:**
+For products requiring size selection (shoes, tops, bottoms):
+- Shoe: Select size {PREFERRED_SHOE_SIZE} or closest equivalent
+- Top: Select size {PREFERRED_TOP_SIZE} or closest equivalent
+- Bottom: Select size {PREFERRED_BOTTOM_SIZE} or closest equivalent
 
-3.  **Availability Check (Post Size Selection or General):**
-    - **If size selection was attempted (Step 2):**
-        - If the preferred size was *unavailable* or *could not be selected*, set 'price' to -1.0.
-        - If the preferred size *was* selected, check *specifically* for availability indicators related to that size. Look for:
-            - An active 'Add to Cart', 'Add to Bag', or 'Buy Now' button.
-            - Explicit messages like 'In Stock', 'Available'.
-            - Conversely, look for 'Out of Stock', 'Unavailable', 'Notify me' messages *after* size selection, or a disabled 'Add to Cart' button.
-        - If the selected size is indicated as unavailable, set 'price' to -1.0.
-    - **If size selection was NOT applicable (product type 'other' or no size options):**
-        - Check the general availability of the product. Look for an active 'Add to Cart'/'Buy Now' button or explicit 'In Stock' messages. Check for general 'Out of Stock' messages.
-        - If the product is indicated as unavailable, set 'price' to -1.0.
+**Availability & Pricing Logic:**
+If preferred size is unavailable, disabled, or missing: Set price to -1.0
+If size is available OR product doesn't require size selection:
+- Extract current price as numerical value (e.g., 49.99)
+- Look for availability indicators: "Add to Cart", "In Stock", "Available"
+- Avoid out-of-stock indicators: "Out of Stock", "Unavailable", "Notify Me"
 
-4.  **Price Extraction:**
-    - If the 'price' has NOT been set to -1.0 in the previous steps (meaning the product/size is considered available):
-        - Extract the current price. If a size was selected, ensure it's the price for *that specific size*. If no size was selected, get the general product price.
-        - Set the extracted price in the 'price' field. Ensure it is a numerical value (e.g., 49.99).
-    - If at any point availability cannot be confirmed or a price cannot be extracted despite the item seeming available, set 'price' to -1.0 as a fallback.
+**Discount Calculation:**
+For available products (price > 0):
+- Find discount indicators: "% off", "Save $X", crossed-out original price
+- Calculate percentage: ((Original Price - Sale Price) / Original Price) × 100
+- If no discount found, set to 0.0
 
-5.  **Discount Calculation:**
-    - If the 'price' field is greater than 0.0:
-        - Check for any indicated discounts (e.g., '% off', 'Save $X', original price vs. sale price).
-        - Calculate or extract the discount percentage (e.g., 25.0 for 25% off). If calculating from a saved amount, use the formula: (Amount Saved / (Current Price + Amount Saved)) * 100. If calculating from original and sale price: ((Original Price - Sale Price) / Original Price) * 100.
-        - Set the calculated percentage in the 'discount' field. Ensure it's a number.
-    - If no discount is found or the price is -1.0, set the 'discount' field to 0.0.
-"""
+**Output Requirements:**
+- price: Numerical value or -1.0 if unavailable
+- discount: Percentage as number (e.g., 25.0 for 25% off) or 0.0
+- name: Exact product title
+- image_url: Valid, complete image URL or empty string ""
+- url: Current page URL
+
+Focus on accuracy and handle edge cases gracefully. Pay special attention to finding the correct main product image URL."""
 
         initial_actions = [
             {'go_to_url': {'url': url}}
         ]
         
+        # Initialize LLM with latest Gemini model from browser-use
+        os.environ['GOOGLE_API_KEY'] = str(GEMINI_API_KEY)
+        llm = ChatGoogle(model='gemini-2.0-flash-exp')
+        
         agent = Agent(
-            browser= Browser(config=BrowserConfig(headless=True, timeout=60_000)),
             task=task_description,
-            llm=ChatGoogleGenerativeAI(model='gemini-2.5-flash', api_key=SecretStr(str(GEMINI_API_KEY))),
-            
+            llm=llm,
             controller=controller,
             initial_actions=initial_actions
         )
